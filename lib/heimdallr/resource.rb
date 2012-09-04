@@ -38,7 +38,7 @@ module Heimdallr
   module ResourceImplementation
     def self.prepare_options(klass, options)
       options = options.dup
-      options[:resource] = (options[:resource] || klass.name.sub(/Controller$/, '').singularize.underscore).to_s
+      #options[:resource] = (options[:resource] || klass.name.sub(/Controller$/, '').singularize.underscore).to_s
 
       filter_keys = [
         :only,
@@ -59,14 +59,14 @@ module Heimdallr
     def self.load(controller, options)
       return if controller.instance_variable_defined? self.ivar_name(controller, options)
 
-      scope = self.class_name(options).constantize.scoped
+      scope = self.class_name(controller, options).constantize.scoped
       self.__load controller, options, scope, :load
     end
 
     def self.load_and_authorize(controller, options)
       return if controller.instance_variable_defined? self.ivar_name(controller, options)
 
-      scope = self.class_name(options).constantize.restrict(controller.security_context)
+      scope = self.class_name(controller, options).constantize.restrict(controller.security_context)
       self.__load controller, options, scope, :load_and_authorize
 
       return if options[:related]
@@ -133,12 +133,12 @@ module Heimdallr
         new_record: -> {
           controller.instance_variable_set(
             self.ivar_name(controller, options),
-            scope.new(controller.params[self.params_key_name(options)] || {})
+            scope.new(controller.params[self.params_key_name(controller, options)] || {})
           )
         },
 
         record: -> {
-          key = [:"#{self.params_key_name(options)}_id", :id].map{|key| controller.params[key] }.find &:present?
+          key = [:"#{self.params_key_name(controller, options)}_id", :id].map{|key| controller.params[key] }.find &:present?
           controller.instance_variable_set(
             self.ivar_name(controller, options),
             scope.send(options[:finder] || :find, key)
@@ -146,7 +146,7 @@ module Heimdallr
         },
 
         related_record: -> {
-          key = controller.params[:"#{self.params_key_name(options)}_id"]
+          key = controller.params[:"#{self.params_key_name(controller, options)}_id"]
           unless key.blank?
             controller.instance_variable_set(
               self.ivar_name(controller, options),
@@ -187,34 +187,30 @@ module Heimdallr
 
     def self.ivar_name(controller, options)
       if action_type(controller.params[:action], options) == :collection
-        :"@#{self.variable_name(options).pluralize}"
+        :"@#{self.variable_name(controller, options).pluralize}"
       else
-        :"@#{self.variable_name(options)}"
+        :"@#{self.variable_name(controller, options)}"
       end
     end
 
-    def self.variable_name(options)
-      if options.kind_of? Hash
-        options[:resource]
-      else
-        options.to_s
-      end.parameterize('_')
+    def self.variable_name(controller, options)
+     name(controller, options).parameterize('_')
     end
 
-    def self.class_name(options)
-      if options.kind_of? Hash
-        options[:resource]
-      else
-        options.to_s
-      end.classify
+    def self.class_name(controller, options)
+      name(controller, options).classify
     end
 
-    def self.params_key_name(options)
-      if options.kind_of? Hash
-        options[:resource]
-      else
-        options.to_s
-      end.split('/').last
+    def self.params_key_name(controller, options)
+      name(controller, options).split('/').last
+    end
+
+    def self.name_from_controller(controller)
+      controller.params[:controller].sub("Controller", "").underscore.split('/').last.singularize
+    end
+
+    def self.name(controller, options)
+      (options[:resource] || name_from_controller(controller)).to_s
     end
   end
 end

@@ -5,4 +5,5 @@ Dummy::Application.routes.draw do
     end
   end
   resources :fluffies
+  resources :posts
 end
